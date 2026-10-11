@@ -28,6 +28,12 @@
                     </button>
                 </div>
             </header>
+            <div class="secret-room-bar">
+                <button class="secret-room-btn" id="open-secret-modal-btn">
+                    <i class="ph ph-lock-key ph-bold"></i>
+                    <span>🔒 Join Secret 2-Person Chat</span>
+                </button>
+            </div>
             <div class="search-container">
                 <input type="text" class="search-input" id="search-input" 
                        placeholder="Search friends...">
@@ -45,7 +51,7 @@
                  align-items:center;justify-content:center;height:100%;
                  color:var(--text-secondary);text-align:center;padding:20px;">
                 <i class="ph ph-chat-teardrop-text" style="font-size:64px;margin-bottom:16px;"></i>
-                <h2>Select a friend to start chatting</h2>
+                <h2>Select a friend or join a Secret Room</h2>
             </div>
 
             <div id="active-chat" style="display:none;height:100%;
@@ -58,7 +64,18 @@
                     <img src="" alt="" class="profile-avatar" id="chat-avatar">
                     <div class="chat-header-info">
                         <div class="chat-header-name" id="chat-name">-</div>
-                        <div class="chat-header-status">Online</div>
+                        <div class="chat-header-status" id="chat-status">Online</div>
+                    </div>
+                    <div class="chat-header-actions" id="chat-header-actions" style="margin-left:auto;display:flex;gap:6px;">
+                        <button class="attach-btn" id="copy-secret-key-btn" style="display:none;" title="Copy Secret Passphrase">
+                            <i class="ph ph-copy ph-xl"></i>
+                        </button>
+                        <button class="attach-btn" id="clear-secret-btn" style="display:none;" title="Clear All Room Messages">
+                            <i class="ph ph-trash ph-xl"></i>
+                        </button>
+                        <button class="attach-btn" id="leave-secret-btn" style="display:none;" title="Leave Secret Room">
+                            <i class="ph ph-x-circle ph-xl"></i>
+                        </button>
                     </div>
                 </header>
                 <div class="chat-messages" id="chat-messages"></div>
@@ -107,6 +124,41 @@
             <div class="modal-footer">
                 <div class="modal-error" id="profile-error"></div>
                 <button class="btn-primary" id="save-profile-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secret Room Modal -->
+    <div class="modal-overlay" id="secret-modal" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <i class="ph ph-lock-key ph-xl" style="color:var(--accent);"></i>
+                    <h3 style="margin:0;">Secret 2-Person Room</h3>
+                </div>
+                <button class="attach-btn" id="close-secret-modal">
+                    <i class="ph ph-x ph-xl"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:var(--text-secondary);line-height:1.5;">
+                    Enter any private passphrase. Share this exact passphrase with your friend — only the two of you with this key can see each other and chat!
+                </p>
+                <div class="modal-field">
+                    <label for="secret-key-input">Room Passphrase / Secret Key</label>
+                    <div class="secret-input-wrap">
+                        <input type="text" id="secret-key-input" placeholder="e.g. moonlight_789" autocomplete="off" spellcheck="false" maxlength="50">
+                        <button type="button" class="btn-subtle" id="generate-key-btn" title="Generate random passphrase">
+                            <i class="ph ph-arrows-clockwise"></i> Generate
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-error" id="secret-error"></div>
+                <button class="btn-primary" id="enter-secret-room-btn">
+                    <i class="ph ph-sign-in"></i> Join Secret Room
+                </button>
             </div>
         </div>
     </div>
