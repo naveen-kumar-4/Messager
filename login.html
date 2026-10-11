@@ -10,6 +10,7 @@
     <div class="auth-container">
         <div class="auth-card">
             <h2 id="auth-title">Welcome Back</h2>
+            <div id="auth-error" style="display: none; background: rgba(255, 107, 107, 0.15); border: 1px solid #ff6b6b; color: #ff6b6b; padding: 12px 14px; border-radius: 8px; font-size: 13.5px; margin-bottom: 16px; line-height: 1.4; text-align: left;"></div>
             <form class="auth-form" id="auth-form">
                 <div class="input-group" id="name-group" style="display: none;">
                     <input type="text" id="name" placeholder="Your Name">
@@ -21,7 +22,7 @@
                     <input type="password" id="password" placeholder="Password (min 6 chars)" required>
                 </div>
                 <div class="input-group" id="invite-group" style="display: none;">
-                    <input type="text" id="invite-code" placeholder="Invite Code">
+                    <input type="text" id="invite-code" placeholder="Invite Code (optional)">
                 </div>
                 <button type="submit" class="btn-primary" id="auth-btn">Log In</button>
             </form>
