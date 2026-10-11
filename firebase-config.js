@@ -14,4 +14,4 @@ firebase.initializeApp(firebaseConfig);
 
 const auth = firebase.auth();
 const db = firebase.firestore();
-// Storage is handled by Cloudinary (free) instead of Firebase Storage
+const storage = firebase.storage();

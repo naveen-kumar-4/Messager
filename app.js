@@ -237,14 +237,27 @@ function loadMessages() {
 // Send message
 async function sendMessage() {
     const text = msgInput.value.trim();
-    if (!text || !currentChatId) return;
+    if (!text) return;
+    if (!currentChatId) {
+        alert('Please select a friend to chat with first!');
+        return;
+    }
+
     msgInput.value = '';
-    await db.collection('chats').doc(currentChatId)
-        .collection('messages').add({
-            text: text,
-            senderId: currentUser.uid,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+    msgInput.focus();
+
+    try {
+        await db.collection('chats').doc(currentChatId)
+            .collection('messages').add({
+                text: text,
+                senderId: currentUser.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+    } catch (err) {
+        console.error('Failed to send message:', err);
+        msgInput.value = text; // restore text if failed
+        alert('Failed to send message: ' + err.message);
+    }
 }
 
 // --- MEDIA UPLOAD ---
@@ -300,4 +313,25 @@ fileInput.addEventListener('change', async () => {
     }
 });
 
-// --- SEND TEXT MESSAGE ---
+// --- SEND TEXT MESSAGE LISTENERS ---
+sendBtn.addEventListener('click', sendMessage);
+
+msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+// --- SEARCH FRIENDS ---
+const searchInput = document.getElementById('search-input');
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase().trim();
+        const items = contactList.getElementsByClassName('contact-item');
+        Array.from(items).forEach(item => {
+            const name = item.querySelector('.contact-name')?.textContent?.toLowerCase() || '';
+            item.style.display = name.includes(query) ? 'flex' : 'none';
+        });
+    });
+}
