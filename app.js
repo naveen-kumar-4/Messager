@@ -51,7 +51,57 @@ const profileError = document.getElementById('profile-error');
 const modalAvatar = document.getElementById('modal-avatar');
 
 // Logout
-logoutBtn.addEventListener('click', () => auth.signOut());
+logoutBtn.addEventListener('click', async () => {
+    if (currentUser) {
+        try {
+            await db.collection('users').doc(currentUser.uid).update({
+                isOnline: false,
+                lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (_) {}
+    }
+    auth.signOut();
+});
+
+// Presence tracking
+function setupPresence() {
+    if (!currentUser) return;
+    const userRef = db.collection('users').doc(currentUser.uid);
+
+    const markOnline = () => {
+        userRef.update({
+            isOnline: true,
+            lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+    };
+
+    const markOffline = () => {
+        userRef.update({
+            isOnline: false,
+            lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(() => {});
+    };
+
+    markOnline();
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            markOnline();
+        } else {
+            markOffline();
+        }
+    });
+
+    window.addEventListener('beforeunload', () => {
+        markOffline();
+    });
+
+    setInterval(() => {
+        if (document.visibilityState === 'visible' && currentUser) {
+            markOnline();
+        }
+    }, 45000);
+}
 
 // Guard: redirect to login if not logged in
 auth.onAuthStateChanged(async (user) => {
@@ -60,6 +110,7 @@ auth.onAuthStateChanged(async (user) => {
         window.location.href = 'login.html';
     } else {
         currentUser = user;
+        setupPresence();
         await refreshMyProfile();
         loadContacts();
     }
@@ -152,6 +203,98 @@ saveProfileBtn.addEventListener('click', async () => {
 });
 
 let contactsLastMsgListeners = [];
+let activeContactListener = null;
+let activeTypingListener = null;
+let isPartnerTyping = false;
+let currentActiveContact = null;
+let myTypingTimeout = null;
+
+// Helper to broadcast current user typing status
+function setMyTyping(isTyping) {
+    if (!currentChatId || !currentUser) return;
+    const docRef = isSecretRoom
+        ? db.collection('secret_rooms').doc(currentChatId)
+        : db.collection('chats').doc(currentChatId);
+
+    docRef.set({
+        typing: {
+            [currentUser.uid]: isTyping
+        }
+    }, { merge: true }).catch(() => {});
+}
+
+// Render partner online / last seen status in chat header
+function renderContactOnlineStatus(data) {
+    if (!chatStatus || isPartnerTyping || isSecretRoom) return;
+    if (data && data.isOnline) {
+        chatStatus.innerHTML = '<span style="color:#25d366;font-weight:500;">Online</span>';
+    } else if (data && data.lastSeen) {
+        const date = data.lastSeen.toDate ? data.lastSeen.toDate() : new Date(data.lastSeen);
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        chatStatus.innerHTML = `<span style="color:var(--text-secondary);">Last seen ${timeStr}</span>`;
+    } else {
+        chatStatus.innerHTML = '<span style="color:var(--text-secondary);">Offline</span>';
+    }
+}
+
+// Listen for partner typing in real-time
+function listenToTyping(partnerUid) {
+    if (activeTypingListener) activeTypingListener();
+
+    const docRef = isSecretRoom
+        ? db.collection('secret_rooms').doc(currentChatId)
+        : db.collection('chats').doc(currentChatId);
+
+    activeTypingListener = docRef.onSnapshot((doc) => {
+        if (!doc.exists) {
+            isPartnerTyping = false;
+            hideTypingBubble();
+            return;
+        }
+
+        const typingData = doc.data()?.typing || {};
+        let typingNow = false;
+
+        if (isSecretRoom) {
+            typingNow = Object.entries(typingData).some(([uid, val]) => uid !== currentUser.uid && val === true);
+        } else if (partnerUid) {
+            typingNow = typingData[partnerUid] === true;
+        }
+
+        isPartnerTyping = typingNow;
+
+        if (typingNow) {
+            if (chatStatus) {
+                chatStatus.innerHTML = '<span class="typing-status">typing...</span>';
+            }
+            showTypingBubble();
+        } else {
+            hideTypingBubble();
+            if (isSecretRoom) {
+                if (chatStatus) chatStatus.textContent = `🔒 Key: ${currentSecretKey}`;
+            } else if (currentActiveContact) {
+                renderContactOnlineStatus(currentActiveContact);
+            }
+        }
+    }, () => {});
+}
+
+function showTypingBubble() {
+    let bubble = document.getElementById('typing-bubble');
+    if (!bubble) {
+        bubble = document.createElement('div');
+        bubble.id = 'typing-bubble';
+        bubble.className = 'typing-bubble';
+        bubble.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div>`;
+        chatMessages.appendChild(bubble);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+function hideTypingBubble() {
+    const bubble = document.getElementById('typing-bubble');
+    if (bubble) bubble.remove();
+}
 
 // Load & display contacts from Firestore
 function loadContacts() {
@@ -180,7 +323,10 @@ function loadContacts() {
             el.className = 'contact-item';
             el.id = `contact-item-${u.uid}`;
             el.innerHTML = `
-                <img src="${avatarUrl}" class="contact-avatar" alt="${label}">
+                <div class="avatar-wrap">
+                    <img src="${avatarUrl}" class="contact-avatar" alt="${label}">
+                    ${u.isOnline ? '<span class="avatar-online-badge" id="online-badge-' + u.uid + '" title="Online"></span>' : ''}
+                </div>
                 <div class="contact-info">
                     <div class="contact-name-time">
                         <span class="contact-name">${label}</span>
@@ -224,7 +370,7 @@ function loadContacts() {
                                 lastMsgEl.textContent = (lastMsg.senderId === currentUser.uid ? 'You: ' : '') + previewText;
                             }
 
-                            // Unread check:
+                            // Unread check
                             const isFromOther = lastMsg.senderId !== currentUser.uid;
                             const isCurrentlyOpen = (currentChatId === chatId && !isSecretRoom && activeChat.style.display === 'flex');
                             const lastReadTimestamp = parseInt(localStorage.getItem('lastRead_' + chatId) || '0', 10);
@@ -280,15 +426,28 @@ function getRoomId(key) {
 function openChat(contact, avatarUrl) {
     isSecretRoom = false;
     currentSecretKey = null;
+    currentActiveContact = contact;
 
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'none';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'none';
     if (clearSecretBtn) clearSecretBtn.style.display = 'none';
-    if (chatStatus) chatStatus.textContent = 'Online';
 
     currentChatId = [currentUser.uid, contact.uid].sort().join('_');
     chatName.textContent = contact.name;
     chatAvatar.src = avatarUrl;
+
+    // Listen to contact live online / last seen status
+    if (activeContactListener) activeContactListener();
+    activeContactListener = db.collection('users').doc(contact.uid).onSnapshot((doc) => {
+        if (!doc.exists) return;
+        currentActiveContact = doc.data();
+        if (!isPartnerTyping) {
+            renderContactOnlineStatus(currentActiveContact);
+        }
+    });
+
+    // Listen to partner typing in this chat
+    listenToTyping(contact.uid);
 
     // Mark as read immediately
     localStorage.setItem('lastRead_' + currentChatId, Date.now().toString());
@@ -311,6 +470,8 @@ function openChat(contact, avatarUrl) {
 
 // Join a Secret 2-Person Room
 function joinSecretRoom(passphrase) {
+    if (activeContactListener) activeContactListener();
+    currentActiveContact = null;
     isSecretRoom = true;
     currentSecretKey = passphrase.trim();
     currentChatId = getRoomId(currentSecretKey);
@@ -320,6 +481,8 @@ function joinSecretRoom(passphrase) {
     if (chatStatus) {
         chatStatus.textContent = `🔒 Key: ${currentSecretKey}`;
     }
+
+    listenToTyping(null);
 
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'flex';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'flex';
@@ -339,6 +502,11 @@ function joinSecretRoom(passphrase) {
 
 // Leave Secret Room
 function leaveSecretRoom() {
+    setMyTyping(false);
+    if (activeContactListener) activeContactListener();
+    if (activeTypingListener) activeTypingListener();
+    hideTypingBubble();
+
     isSecretRoom = false;
     currentSecretKey = null;
     currentChatId = null;
@@ -362,6 +530,11 @@ function leaveSecretRoom() {
 
 // Back button handler
 backBtn.addEventListener('click', () => {
+    setMyTyping(false);
+    if (activeContactListener) activeContactListener();
+    if (activeTypingListener) activeTypingListener();
+    hideTypingBubble();
+
     if (isSecretRoom) {
         leaveSecretRoom();
         return;
@@ -410,6 +583,10 @@ function loadMessages() {
             });
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
+            if (isPartnerTyping) {
+                showTypingBubble();
+            }
+
             if (currentChatId && !isSecretRoom) {
                 localStorage.setItem('lastRead_' + currentChatId, Date.now().toString());
             }
@@ -424,6 +601,9 @@ async function sendMessage() {
         alert('Please select a friend or join a Secret Room first!');
         return;
     }
+
+    clearTimeout(myTypingTimeout);
+    setMyTyping(false);
 
     msgInput.value = '';
     msgInput.focus();
@@ -490,7 +670,7 @@ fileInput.addEventListener('change', async () => {
     }
 });
 
-// --- SEND TEXT MESSAGE LISTENERS ---
+// --- SEND TEXT MESSAGE & TYPING LISTENERS ---
 sendBtn.addEventListener('click', sendMessage);
 
 msgInput.addEventListener('keydown', (e) => {
@@ -498,6 +678,16 @@ msgInput.addEventListener('keydown', (e) => {
         e.preventDefault();
         sendMessage();
     }
+});
+
+// Live typing broadcast while user is typing
+msgInput.addEventListener('input', () => {
+    if (!currentChatId) return;
+    setMyTyping(true);
+    clearTimeout(myTypingTimeout);
+    myTypingTimeout = setTimeout(() => {
+        setMyTyping(false);
+    }, 2500);
 });
 
 // --- SEARCH FRIENDS ---
