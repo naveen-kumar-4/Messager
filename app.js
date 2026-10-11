@@ -151,11 +151,18 @@ saveProfileBtn.addEventListener('click', async () => {
     }
 });
 
+let contactsLastMsgListeners = [];
+
 // Load & display contacts from Firestore
 function loadContacts() {
     console.log('Loading contacts...');
     db.collection('users').onSnapshot((snapshot) => {
         console.log('Users found:', snapshot.size);
+
+        // Unsubscribe previous listeners
+        contactsLastMsgListeners.forEach(unsub => unsub());
+        contactsLastMsgListeners = [];
+
         contactList.innerHTML = '';
 
         if (snapshot.empty) {
@@ -165,21 +172,83 @@ function loadContacts() {
 
         snapshot.forEach((doc) => {
             const u = doc.data();
-            const label = u.uid === currentUser.uid ? u.name + ' (You)' : u.name;
+            const isMe = u.uid === currentUser.uid;
+            const label = isMe ? u.name + ' (You)' : u.name;
             const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(label)}&background=random`;
 
             const el = document.createElement('div');
             el.className = 'contact-item';
+            el.id = `contact-item-${u.uid}`;
             el.innerHTML = `
                 <img src="${avatarUrl}" class="contact-avatar" alt="${label}">
                 <div class="contact-info">
                     <div class="contact-name-time">
                         <span class="contact-name">${label}</span>
+                        <span class="contact-time" id="time-${u.uid}"></span>
                     </div>
-                    <div class="contact-last-msg">Tap to chat</div>
+                    <div class="contact-last-msg">
+                        <span class="last-msg-text" id="last-msg-${u.uid}">Tap to chat</span>
+                        <span class="unread-dot" id="dot-${u.uid}" style="display:none;" title="New message"></span>
+                    </div>
                 </div>`;
             el.addEventListener('click', () => openChat(u, avatarUrl));
             contactList.appendChild(el);
+
+            if (!isMe) {
+                const chatId = [currentUser.uid, u.uid].sort().join('_');
+                const lastMsgEl = el.querySelector(`#last-msg-${u.uid}`);
+                const timeEl = el.querySelector(`#time-${u.uid}`);
+                const dotEl = el.querySelector(`#dot-${u.uid}`);
+
+                const unsub = db.collection('chats').doc(chatId)
+                    .collection('messages')
+                    .orderBy('createdAt', 'desc')
+                    .limit(1)
+                    .onSnapshot((msgSnap) => {
+                        if (!msgSnap.empty) {
+                            const lastMsg = msgSnap.docs[0].data();
+
+                            // Format timestamp
+                            if (lastMsg.createdAt && timeEl) {
+                                const date = lastMsg.createdAt.toDate ? lastMsg.createdAt.toDate() : new Date(lastMsg.createdAt);
+                                timeEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            }
+
+                            // Format preview text
+                            let previewText = 'Tap to chat';
+                            if (lastMsg.type === 'image') previewText = '📷 Photo';
+                            else if (lastMsg.type === 'video') previewText = '🎥 Video';
+                            else if (lastMsg.text) previewText = lastMsg.text;
+
+                            if (lastMsgEl) {
+                                lastMsgEl.textContent = (lastMsg.senderId === currentUser.uid ? 'You: ' : '') + previewText;
+                            }
+
+                            // Unread check:
+                            const isFromOther = lastMsg.senderId !== currentUser.uid;
+                            const isCurrentlyOpen = (currentChatId === chatId && !isSecretRoom && activeChat.style.display === 'flex');
+                            const lastReadTimestamp = parseInt(localStorage.getItem('lastRead_' + chatId) || '0', 10);
+                            const msgTimestamp = lastMsg.createdAt?.toMillis ? lastMsg.createdAt.toMillis() : (lastMsg.createdAt ? new Date(lastMsg.createdAt).getTime() : Date.now());
+
+                            if (isFromOther && !isCurrentlyOpen && msgTimestamp > lastReadTimestamp) {
+                                dotEl.style.display = 'inline-block';
+                                el.classList.add('has-unread');
+                            } else {
+                                dotEl.style.display = 'none';
+                                el.classList.remove('has-unread');
+                            }
+                        } else {
+                            if (lastMsgEl) lastMsgEl.textContent = 'Tap to chat';
+                            if (timeEl) timeEl.textContent = '';
+                            if (dotEl) dotEl.style.display = 'none';
+                            el.classList.remove('has-unread');
+                        }
+                    }, (err) => {
+                        console.warn('Could not listen to last message for ' + u.uid, err);
+                    });
+
+                contactsLastMsgListeners.push(unsub);
+            }
         });
     }, (err) => {
         console.error('Firestore error:', err);
@@ -220,6 +289,13 @@ function openChat(contact, avatarUrl) {
     currentChatId = [currentUser.uid, contact.uid].sort().join('_');
     chatName.textContent = contact.name;
     chatAvatar.src = avatarUrl;
+
+    // Mark as read immediately
+    localStorage.setItem('lastRead_' + currentChatId, Date.now().toString());
+    const dot = document.getElementById(`dot-${contact.uid}`);
+    if (dot) dot.style.display = 'none';
+    const item = document.getElementById(`contact-item-${contact.uid}`);
+    if (item) item.classList.remove('has-unread');
 
     noChatSelected.style.display = 'none';
     activeChat.style.display = 'flex';
@@ -333,6 +409,10 @@ function loadMessages() {
                 chatMessages.appendChild(div);
             });
             chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            if (currentChatId && !isSecretRoom) {
+                localStorage.setItem('lastRead_' + currentChatId, Date.now().toString());
+            }
         });
 }
 

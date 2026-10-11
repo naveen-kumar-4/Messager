@@ -400,9 +400,49 @@ html, body {
 .contact-last-msg {
   font-size: 14px;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.last-msg-text {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
+}
+
+.unread-dot {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  background-color: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 8px rgba(0, 168, 132, 0.8);
+  animation: pulseDot 2s infinite ease-in-out;
+}
+
+@keyframes pulseDot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 168, 132, 0.8); }
+  70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(0, 168, 132, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 168, 132, 0); }
+}
+
+.contact-item.has-unread .contact-name {
+  color: #fff;
+  font-weight: 600;
+}
+
+.contact-item.has-unread .contact-time {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.contact-item.has-unread .last-msg-text {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 /* Main Chat Area */
