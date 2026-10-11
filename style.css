@@ -649,6 +649,90 @@ html, body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Invite Code & Contact Privacy */
+.invite-banner {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background-color: rgba(255, 255, 255, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invite-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.invite-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.copy-code-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.copy-code-chip:hover {
+  border-color: var(--accent);
+  background-color: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.copy-code-chip.copied {
+  color: #25d366;
+  border-color: #25d366;
+}
+
+.add-friend-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--accent);
+  color: #ffffff;
+  border: none;
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-friend-btn:hover {
+  background-color: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.empty-contacts-state {
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Secret Room Styles */
 .secret-room-bar {
   padding: 10px 14px;

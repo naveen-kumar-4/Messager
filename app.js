@@ -26,6 +26,19 @@ const fileInput = document.getElementById('file-input');
 const sidebarMyName = document.getElementById('sidebar-my-name');
 const sidebarMyUsername = document.getElementById('sidebar-my-username');
 
+// --- Invite Code & Add Friend Elements ---
+let myInviteCode = null;
+let contactsUnsubscribers = [];
+let contactsListener = null;
+const copyMyCodeBtn = document.getElementById('copy-my-code-btn');
+const myInviteCodeDisplay = document.getElementById('my-invite-code');
+const openAddFriendBtn = document.getElementById('open-add-friend-btn');
+const addFriendModal = document.getElementById('add-friend-modal');
+const closeAddFriendModal = document.getElementById('close-add-friend-modal');
+const friendCodeInput = document.getElementById('friend-code-input');
+const confirmAddFriendBtn = document.getElementById('confirm-add-friend-btn');
+const addFriendError = document.getElementById('add-friend-error');
+
 // --- Secret Room Header Actions ---
 const leaveSecretBtn = document.getElementById('leave-secret-btn');
 const copySecretKeyBtn = document.getElementById('copy-secret-key-btn');
@@ -117,7 +130,17 @@ auth.onAuthStateChanged(async (user) => {
     }
 });
 
-// Fetch & display the current user's name/username in sidebar
+// Generate 6-char unique invite code (unambiguous characters)
+function generateInviteCode() {
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+}
+
+// Fetch & display the current user's profile and Invite Code
 async function refreshMyProfile() {
     const userDoc = await db.collection('users').doc(currentUser.uid).get();
     if (userDoc.exists) {
@@ -129,6 +152,30 @@ async function refreshMyProfile() {
         sidebarMyUsername.textContent = username ? '@' + username : data.email || '';
         const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
         myProfileAvatar.src = avatarUrl;
+
+        // Ensure user has a unique Invite Code for 2-person pairing
+        if (data.inviteCode) {
+            myInviteCode = data.inviteCode;
+        } else {
+            myInviteCode = generateInviteCode();
+            await db.collection('users').doc(currentUser.uid).update({
+                inviteCode: myInviteCode
+            }).catch(() => {});
+        }
+
+        // Register in invite_codes lookup for fast single-doc search
+        if (myInviteCode) {
+            await db.collection('invite_codes').doc(myInviteCode).set({
+                uid: currentUser.uid,
+                name: name,
+                username: username,
+                email: currentUser.email || ''
+            }, { merge: true }).catch((e) => console.warn('Invite code index update:', e));
+        }
+
+        if (myInviteCodeDisplay) {
+            myInviteCodeDisplay.textContent = myInviteCode;
+        }
     }
 }
 
@@ -297,71 +344,98 @@ function hideTypingBubble() {
     if (bubble) bubble.remove();
 }
 
-// Load & display contacts from Firestore
+// Load & display ONLY paired contacts from Firestore (Zero strangers / test users!)
 function loadContacts() {
-    console.log('Loading contacts...');
-    db.collection('users').onSnapshot((snapshot) => {
-        console.log('Users found:', snapshot.size);
+    console.log('Loading private contacts for user:', currentUser.uid);
 
-        // Unsubscribe previous listeners
-        contactsLastMsgListeners.forEach(unsub => unsub());
-        contactsLastMsgListeners = [];
+    if (contactsListener) contactsListener();
 
-        contactList.innerHTML = '';
+    contactsListener = db.collection('users').doc(currentUser.uid)
+        .collection('contacts')
+        .onSnapshot((snapshot) => {
+            // Clean up old listeners
+            contactsLastMsgListeners.forEach(unsub => unsub());
+            contactsLastMsgListeners = [];
+            contactsUnsubscribers.forEach(unsub => unsub());
+            contactsUnsubscribers = [];
 
-        if (snapshot.empty) {
-            contactList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary);">No friends yet. Share your invite code!</div>';
-            return;
-        }
+            contactList.innerHTML = '';
 
-        snapshot.forEach((doc) => {
-            const u = doc.data();
-            const isMe = u.uid === currentUser.uid;
-            const label = isMe ? u.name + ' (You)' : u.name;
-            const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(label)}&background=random`;
+            if (snapshot.empty) {
+                contactList.innerHTML = `
+                    <div class="empty-contacts-state">
+                        <i class="ph ph-shield-check" style="font-size:42px;color:var(--accent);margin-bottom:12px;"></i>
+                        <div style="font-weight:600;font-size:15px;color:var(--text-primary);margin-bottom:6px;">Your chats are private</div>
+                        <div style="font-size:13px;line-height:1.4;color:var(--text-secondary);max-width:240px;margin:0 auto 16px;">
+                            Only friends you pair with using an Invite Code will appear here.
+                        </div>
+                        <button class="btn-subtle" id="empty-state-add-btn">
+                            <i class="ph ph-user-plus"></i> Enter Friend's Code
+                        </button>
+                    </div>`;
+                const emptyBtn = document.getElementById('empty-state-add-btn');
+                if (emptyBtn) emptyBtn.addEventListener('click', openAddFriendModal);
+                return;
+            }
 
-            const el = document.createElement('div');
-            el.className = 'contact-item';
-            el.id = `contact-item-${u.uid}`;
-            el.innerHTML = `
-                <div class="avatar-wrap">
-                    <img src="${avatarUrl}" class="contact-avatar" alt="${label}">
-                    ${u.isOnline ? '<span class="avatar-online-badge" id="online-badge-' + u.uid + '" title="Online"></span>' : ''}
-                </div>
-                <div class="contact-info">
-                    <div class="contact-name-time">
-                        <span class="contact-name">${label}</span>
-                        <span class="contact-time" id="time-${u.uid}"></span>
-                    </div>
-                    <div class="contact-last-msg">
-                        <span class="last-msg-text" id="last-msg-${u.uid}">Tap to chat</span>
-                        <span class="unread-dot" id="dot-${u.uid}" style="display:none;" title="New message"></span>
-                    </div>
-                </div>`;
-            el.addEventListener('click', () => openChat(u, avatarUrl));
-            contactList.appendChild(el);
+            snapshot.forEach((contactDoc) => {
+                const contactUid = contactDoc.id;
+                if (contactUid === currentUser.uid) return;
 
-            if (!isMe) {
-                const chatId = [currentUser.uid, u.uid].sort().join('_');
-                const lastMsgEl = el.querySelector(`#last-msg-${u.uid}`);
-                const timeEl = el.querySelector(`#time-${u.uid}`);
-                const dotEl = el.querySelector(`#dot-${u.uid}`);
+                const el = document.createElement('div');
+                el.className = 'contact-item';
+                el.id = `contact-item-${contactUid}`;
+                contactList.appendChild(el);
 
-                const unsub = db.collection('chats').doc(chatId)
+                // Listen to contact user profile updates
+                const unsubProfile = db.collection('users').doc(contactUid).onSnapshot((uDoc) => {
+                    if (!uDoc.exists) {
+                        el.remove();
+                        return;
+                    }
+                    const u = uDoc.data();
+                    const label = u.name || 'Friend';
+                    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(label)}&background=random`;
+
+                    el.innerHTML = `
+                        <div class="avatar-wrap">
+                            <img src="${avatarUrl}" class="contact-avatar" alt="${label}">
+                            ${u.isOnline ? '<span class="avatar-online-badge" id="online-badge-' + u.uid + '" title="Online"></span>' : ''}
+                        </div>
+                        <div class="contact-info">
+                            <div class="contact-name-time">
+                                <span class="contact-name">${label}</span>
+                                <span class="contact-time" id="time-${u.uid}"></span>
+                            </div>
+                            <div class="contact-last-msg">
+                                <span class="last-msg-text" id="last-msg-${u.uid}">Tap to chat</span>
+                                <span class="unread-dot" id="dot-${u.uid}" style="display:none;" title="New message"></span>
+                            </div>
+                        </div>`;
+                    
+                    el.onclick = () => openChat(u, avatarUrl);
+                });
+                contactsUnsubscribers.push(unsubProfile);
+
+                // Listen to last message and unread badge in real time
+                const chatId = [currentUser.uid, contactUid].sort().join('_');
+                const unsubMsg = db.collection('chats').doc(chatId)
                     .collection('messages')
                     .orderBy('createdAt', 'desc')
                     .limit(1)
                     .onSnapshot((msgSnap) => {
+                        const lastMsgEl = el.querySelector(`#last-msg-${contactUid}`);
+                        const timeEl = el.querySelector(`#time-${contactUid}`);
+                        const dotEl = el.querySelector(`#dot-${contactUid}`);
+
                         if (!msgSnap.empty) {
                             const lastMsg = msgSnap.docs[0].data();
 
-                            // Format timestamp
                             if (lastMsg.createdAt && timeEl) {
                                 const date = lastMsg.createdAt.toDate ? lastMsg.createdAt.toDate() : new Date(lastMsg.createdAt);
                                 timeEl.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                             }
 
-                            // Format preview text
                             let previewText = 'Tap to chat';
                             if (lastMsg.type === 'image') previewText = '📷 Photo';
                             else if (lastMsg.type === 'video') previewText = '🎥 Video';
@@ -371,17 +445,16 @@ function loadContacts() {
                                 lastMsgEl.textContent = (lastMsg.senderId === currentUser.uid ? 'You: ' : '') + previewText;
                             }
 
-                            // Unread check
                             const isFromOther = lastMsg.senderId !== currentUser.uid;
                             const isCurrentlyOpen = (currentChatId === chatId && !isSecretRoom && activeChat.style.display === 'flex');
                             const lastReadTimestamp = parseInt(localStorage.getItem('lastRead_' + chatId) || '0', 10);
                             const msgTimestamp = lastMsg.createdAt?.toMillis ? lastMsg.createdAt.toMillis() : (lastMsg.createdAt ? new Date(lastMsg.createdAt).getTime() : Date.now());
 
                             if (isFromOther && !isCurrentlyOpen && msgTimestamp > lastReadTimestamp) {
-                                dotEl.style.display = 'inline-block';
+                                if (dotEl) dotEl.style.display = 'inline-block';
                                 el.classList.add('has-unread');
                             } else {
-                                dotEl.style.display = 'none';
+                                if (dotEl) dotEl.style.display = 'none';
                                 el.classList.remove('has-unread');
                             }
                         } else {
@@ -391,16 +464,15 @@ function loadContacts() {
                             el.classList.remove('has-unread');
                         }
                     }, (err) => {
-                        console.warn('Could not listen to last message for ' + u.uid, err);
+                        console.warn('Could not listen to last message for ' + contactUid, err);
                     });
 
-                contactsLastMsgListeners.push(unsub);
-            }
+                contactsLastMsgListeners.push(unsubMsg);
+            });
+        }, (err) => {
+            console.error('Firestore contacts error:', err);
+            contactList.innerHTML = `<div style="padding:20px;color:red;">Error: ${err.message}</div>`;
         });
-    }, (err) => {
-        console.error('Firestore error:', err);
-        contactList.innerHTML = `<div style="padding:20px;color:red;">Error: ${err.message}</div>`;
-    });
 }
 
 // Helper to get Firestore messages collection (regular chat or secret room)
@@ -801,6 +873,138 @@ if (clearSecretBtn) {
     });
 }
 
+// --- ADD FRIEND BY INVITE CODE MODAL & ACTIONS ---
+function openAddFriendModal() {
+    if (friendCodeInput) friendCodeInput.value = '';
+    if (addFriendError) addFriendError.textContent = '';
+    if (addFriendModal) addFriendModal.style.display = 'flex';
+    if (friendCodeInput) friendCodeInput.focus();
+}
+
+function closeAddFriendModalFn() {
+    if (addFriendModal) addFriendModal.style.display = 'none';
+}
+
+if (openAddFriendBtn) openAddFriendBtn.addEventListener('click', openAddFriendModal);
+if (closeAddFriendModal) closeAddFriendModal.addEventListener('click', closeAddFriendModalFn);
+if (addFriendModal) {
+    addFriendModal.addEventListener('click', (e) => {
+        if (e.target === addFriendModal) closeAddFriendModalFn();
+    });
+}
+
+// 1-Click Copy My Invite Code
+if (copyMyCodeBtn) {
+    copyMyCodeBtn.addEventListener('click', async () => {
+        if (!myInviteCode) return;
+        try {
+            await navigator.clipboard.writeText(myInviteCode);
+            const textSpan = document.getElementById('my-invite-code');
+            const orig = textSpan ? textSpan.textContent : myInviteCode;
+            copyMyCodeBtn.classList.add('copied');
+            if (textSpan) textSpan.textContent = 'Copied!';
+            setTimeout(() => {
+                copyMyCodeBtn.classList.remove('copied');
+                if (textSpan) textSpan.textContent = orig;
+            }, 1800);
+        } catch {
+            prompt('Copy your invite code:', myInviteCode);
+        }
+    });
+}
+
+// Connect with Friend by Code
+if (confirmAddFriendBtn) {
+    confirmAddFriendBtn.addEventListener('click', async () => {
+        const inputCode = (friendCodeInput?.value || '').trim().toUpperCase();
+        addFriendError.textContent = '';
+
+        if (!inputCode) {
+            addFriendError.textContent = 'Please enter an Invite Code.';
+            return;
+        }
+
+        if (inputCode === myInviteCode) {
+            addFriendError.textContent = 'You cannot enter your own Invite Code!';
+            return;
+        }
+
+        confirmAddFriendBtn.disabled = true;
+        confirmAddFriendBtn.innerHTML = '<i class="ph ph-spinner ph-bold"></i> Connecting...';
+
+        try {
+            let targetUser = null;
+
+            // 1. Check invite_codes collection
+            const codeDoc = await db.collection('invite_codes').doc(inputCode).get().catch(() => null);
+            if (codeDoc && codeDoc.exists) {
+                targetUser = codeDoc.data();
+            } else {
+                // 2. Fallback query to users collection
+                const userQuery = await db.collection('users').where('inviteCode', '==', inputCode).get();
+                if (!userQuery.empty) {
+                    targetUser = userQuery.docs[0].data();
+                }
+            }
+
+            if (!targetUser || !targetUser.uid) {
+                addFriendError.textContent = `No user found with code "${inputCode}". Please verify the code with your friend.`;
+                return;
+            }
+
+            if (targetUser.uid === currentUser.uid) {
+                addFriendError.textContent = 'You cannot add yourself!';
+                return;
+            }
+
+            // Check if already in contacts
+            const existingContact = await db.collection('users').doc(currentUser.uid)
+                .collection('contacts').doc(targetUser.uid).get();
+            if (existingContact.exists) {
+                addFriendError.textContent = `"${targetUser.name || 'Friend'}" is already in your contacts!`;
+                return;
+            }
+
+            // Mutual pairing in Firestore
+            await db.collection('users').doc(currentUser.uid)
+                .collection('contacts').doc(targetUser.uid).set({
+                    uid: targetUser.uid,
+                    addedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+            await db.collection('users').doc(targetUser.uid)
+                .collection('contacts').doc(currentUser.uid).set({
+                    uid: currentUser.uid,
+                    addedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }).catch((e) => console.warn('Could not write reverse contact:', e));
+
+            closeAddFriendModalFn();
+
+            // Fetch full friend profile and open chat directly
+            const fullFriendDoc = await db.collection('users').doc(targetUser.uid).get();
+            const friendData = fullFriendDoc.exists ? fullFriendDoc.data() : targetUser;
+            const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(friendData.name || 'Friend')}&background=random`;
+            openChat(friendData, avatarUrl);
+
+            alert(`Connected with ${friendData.name || 'Friend'}! You can now chat privately.`);
+        } catch (err) {
+            console.error('Error adding friend:', err);
+            addFriendError.textContent = 'Error: ' + err.message;
+        } finally {
+            confirmAddFriendBtn.disabled = false;
+            confirmAddFriendBtn.innerHTML = '<i class="ph ph-check-circle"></i> Connect & Chat';
+        }
+    });
+}
+
+if (friendCodeInput) {
+    friendCodeInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            confirmAddFriendBtn?.click();
+        }
+    });
+}
+
 // --- DELETE CONTACT & CHAT ---
 if (deleteContactBtn) {
     deleteContactBtn.addEventListener('click', async () => {
@@ -811,15 +1015,21 @@ if (deleteContactBtn) {
         const targetChatId = currentChatId;
 
         const confirmed = confirm(
-            `Delete "${targetName}" and this entire chat?\n\n` +
-            `• All chat messages with ${targetName} will be deleted.\n` +
-            `• ${targetName}'s user profile document will be removed from Firestore so their name is erased from your contacts.\n\n` +
-            `Click OK to delete, or Cancel to go back.`
+            `Remove "${targetName}" and delete this chat?\n\n` +
+            `• Both of you will be unpaired from each other's contact list.\n` +
+            `• All chat messages with ${targetName} will be deleted.\n\n` +
+            `Click OK to proceed, or Cancel to keep.`
         );
         if (!confirmed) return;
 
         try {
-            // 1. Delete all chat messages
+            // 1. Remove mutual contact pairing
+            if (currentUser && targetUid) {
+                await db.collection('users').doc(currentUser.uid).collection('contacts').doc(targetUid).delete().catch(() => {});
+                await db.collection('users').doc(targetUid).collection('contacts').doc(currentUser.uid).delete().catch(() => {});
+            }
+
+            // 2. Delete all chat messages
             if (targetChatId) {
                 const msgSnap = await db.collection('chats').doc(targetChatId).collection('messages').get();
                 if (!msgSnap.empty) {
@@ -830,14 +1040,11 @@ if (deleteContactBtn) {
                 await db.collection('chats').doc(targetChatId).delete().catch(() => {});
             }
 
-            // 2. Clear typing status docs if any
+            // 3. Clear typing status docs if any
             if (currentUser && targetUid) {
                 await db.collection('typing').doc(currentUser.uid + '_' + targetUid).delete().catch(() => {});
                 await db.collection('typing').doc(targetUid + '_' + currentUser.uid).delete().catch(() => {});
             }
-
-            // 3. Delete user document from Firestore 'users' collection
-            await db.collection('users').doc(targetUid).delete();
 
             // 4. Reset UI & listeners
             if (activeContactListener) activeContactListener();
@@ -857,16 +1064,13 @@ if (deleteContactBtn) {
                 backBtn.style.display = 'none';
             }
 
-            alert(`"${targetName}" and their chat were successfully deleted!`);
+            alert(`"${targetName}" was removed from your contacts and the chat was deleted.`);
         } catch (err) {
-            console.error('Error deleting contact/chat:', err);
-            alert(
-                `Could not delete user: ${err.message}\n\n` +
-                `Tip: You can also delete the document directly in Firebase Console:\n` +
-                `Go to Firebase Console ➜ Firestore Database ➜ 'users' collection ➜ delete the document for "${targetName}".`
-            );
+            console.error('Error removing contact/chat:', err);
+            alert('Error removing contact: ' + err.message);
         }
     });
 }
+
 
 

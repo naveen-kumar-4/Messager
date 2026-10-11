@@ -28,6 +28,19 @@
                     </button>
                 </div>
             </header>
+            <div class="invite-banner">
+                <div class="invite-banner-header">
+                    <span class="invite-label"><i class="ph ph-qr-code"></i> My Code:</span>
+                    <button class="copy-code-chip" id="copy-my-code-btn" title="Copy your Invite Code">
+                        <span id="my-invite-code">Loading...</span>
+                        <i class="ph ph-copy"></i>
+                    </button>
+                </div>
+                <button class="add-friend-btn" id="open-add-friend-btn">
+                    <i class="ph ph-user-plus ph-bold"></i>
+                    <span>+ Enter Friend's Code</span>
+                </button>
+            </div>
             <div class="secret-room-bar">
                 <button class="secret-room-btn" id="open-secret-modal-btn">
                     <i class="ph ph-lock-key ph-bold"></i>
@@ -161,6 +174,38 @@
                 <div class="modal-error" id="secret-error"></div>
                 <button class="btn-primary" id="enter-secret-room-btn">
                     <i class="ph ph-sign-in"></i> Join Secret Room
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Friend by Invite Code Modal -->
+    <div class="modal-overlay" id="add-friend-modal" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <i class="ph ph-user-plus ph-xl" style="color:var(--accent);"></i>
+                    <h3 style="margin:0;">Add Friend by Code</h3>
+                </div>
+                <button class="attach-btn" id="close-add-friend-modal">
+                    <i class="ph ph-x ph-xl"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:var(--text-secondary);line-height:1.5;">
+                    Enter your friend's 6-character Invite Code. Once connected, both of you can chat privately.
+                </p>
+                <div class="modal-field">
+                    <label for="friend-code-input">Friend's Invite Code</label>
+                    <input type="text" id="friend-code-input" placeholder="e.g. K7M9P2" 
+                           maxlength="10" autocomplete="off" spellcheck="false"
+                           style="text-transform:uppercase;letter-spacing:3px;font-weight:700;font-size:20px;text-align:center;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-error" id="add-friend-error"></div>
+                <button class="btn-primary" id="confirm-add-friend-btn">
+                    <i class="ph ph-check-circle"></i> Connect & Chat
                 </button>
             </div>
         </div>
