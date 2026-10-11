@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messager</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <header class="sidebar-header">
+                <img src="https://ui-avatars.com/api/?name=Me&background=random" 
+                     alt="My Profile" class="profile-avatar clickable-avatar" id="my-profile-avatar"
+                     title="Edit Profile">
+                <div class="sidebar-header-info" id="sidebar-header-info">
+                    <div class="sidebar-my-name" id="sidebar-my-name">Loading...</div>
+                    <div class="sidebar-my-username" id="sidebar-my-username">@username</div>
+                </div>
+                <div class="sidebar-actions">
+                    <button class="attach-btn" id="edit-profile-btn" title="Edit Profile">
+                        <i class="ph ph-pencil-simple ph-xl"></i>
+                    </button>
+                    <button class="attach-btn" id="logout-btn" title="Logout">
+                        <i class="ph ph-sign-out ph-xl"></i>
+                    </button>
+                </div>
+            </header>
+            <div class="search-container">
+                <input type="text" class="search-input" id="search-input" 
+                       placeholder="Search friends...">
+            </div>
+            <div class="contact-list" id="contact-list">
+                <div style="padding:20px;text-align:center;color:var(--text-secondary);">
+                    Loading...
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area" id="chat-area">
+            <div id="no-chat-selected" style="display:flex;flex-direction:column;
+                 align-items:center;justify-content:center;height:100%;
+                 color:var(--text-secondary);text-align:center;padding:20px;">
+                <i class="ph ph-chat-teardrop-text" style="font-size:64px;margin-bottom:16px;"></i>
+                <h2>Select a friend to start chatting</h2>
+            </div>
+
+            <div id="active-chat" style="display:none;height:100%;
+                 flex-direction:column;width:100%;">
+                <header class="chat-header">
+                    <button class="attach-btn" id="back-btn" 
+                            style="display:none;margin-right:8px;">
+                        <i class="ph ph-arrow-left ph-xl"></i>
+                    </button>
+                    <img src="" alt="" class="profile-avatar" id="chat-avatar">
+                    <div class="chat-header-info">
+                        <div class="chat-header-name" id="chat-name">-</div>
+                        <div class="chat-header-status">Online</div>
+                    </div>
+                </header>
+                <div class="chat-messages" id="chat-messages"></div>
+                <footer class="chat-input-area">
+                    <!-- Hidden file input for image uploads -->
+                    <input type="file" id="file-input" accept="image/*,video/*" style="display:none">
+                    <button class="attach-btn" id="attach-btn" title="Send Image/Video">
+                        <i class="ph ph-paperclip ph-xl"></i>
+                    </button>
+                    <input type="text" class="chat-input" id="msg-input" 
+                           placeholder="Type a message">
+                    <button class="send-btn" id="send-btn">
+                        <i class="ph ph-paper-plane-right ph-xl"></i>
+                    </button>
+                </footer>
+            </div>
+        </main>
+    </div>
+
+    <!-- Profile Edit Modal -->
+    <div class="modal-overlay" id="profile-modal" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Edit Profile</h3>
+                <button class="attach-btn" id="close-profile-modal">
+                    <i class="ph ph-x ph-xl"></i>
+                </button>
+            </div>
+            <div class="modal-avatar-section">
+                <img src="" alt="Avatar" class="modal-avatar" id="modal-avatar">
+            </div>
+            <div class="modal-body">
+                <div class="modal-field">
+                    <label for="profile-name-input">Display Name</label>
+                    <input type="text" id="profile-name-input" placeholder="Your display name" maxlength="40">
+                </div>
+                <div class="modal-field">
+                    <label for="profile-username-input">Username</label>
+                    <div class="username-input-wrap">
+                        <span class="at-prefix">@</span>
+                        <input type="text" id="profile-username-input" placeholder="username" maxlength="24">
+                    </div>
+                    <div class="field-hint">Lowercase letters, numbers, underscores only</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="modal-error" id="profile-error"></div>
+                <button class="btn-primary" id="save-profile-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Compat (no imports needed!) -->
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

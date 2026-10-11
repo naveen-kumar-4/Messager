@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Messager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <h2 id="auth-title">Welcome Back</h2>
+            <form class="auth-form" id="auth-form">
+                <div class="input-group" id="name-group" style="display: none;">
+                    <input type="text" id="name" placeholder="Your Name">
+                </div>
+                <div class="input-group">
+                    <input type="email" id="email" placeholder="Email Address" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="Password (min 6 chars)" required>
+                </div>
+                <div class="input-group" id="invite-group" style="display: none;">
+                    <input type="text" id="invite-code" placeholder="Invite Code">
+                </div>
+                <button type="submit" class="btn-primary" id="auth-btn">Log In</button>
+            </form>
+            <div class="auth-switch">
+                <span id="auth-switch-text">Don't have an account? </span>
+                <a id="auth-toggle-link">Sign Up</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase Compat (no imports needed!) -->
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="auth.js"></script>
+</body>
+</html>
