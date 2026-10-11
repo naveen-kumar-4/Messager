@@ -30,6 +30,7 @@ const sidebarMyUsername = document.getElementById('sidebar-my-username');
 const leaveSecretBtn = document.getElementById('leave-secret-btn');
 const copySecretKeyBtn = document.getElementById('copy-secret-key-btn');
 const clearSecretBtn = document.getElementById('clear-secret-btn');
+const deleteContactBtn = document.getElementById('delete-contact-btn');
 
 // --- Secret Room Modal Elements ---
 const openSecretModalBtn = document.getElementById('open-secret-modal-btn');
@@ -431,6 +432,9 @@ function openChat(contact, avatarUrl) {
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'none';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'none';
     if (clearSecretBtn) clearSecretBtn.style.display = 'none';
+    if (deleteContactBtn) {
+        deleteContactBtn.style.display = (contact.uid !== currentUser.uid) ? 'flex' : 'none';
+    }
 
     currentChatId = [currentUser.uid, contact.uid].sort().join('_');
     chatName.textContent = contact.name;
@@ -487,6 +491,7 @@ function joinSecretRoom(passphrase) {
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'flex';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'flex';
     if (clearSecretBtn) clearSecretBtn.style.display = 'flex';
+    if (deleteContactBtn) deleteContactBtn.style.display = 'none';
 
     noChatSelected.style.display = 'none';
     activeChat.style.display = 'flex';
@@ -516,6 +521,7 @@ function leaveSecretRoom() {
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'none';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'none';
     if (clearSecretBtn) clearSecretBtn.style.display = 'none';
+    if (deleteContactBtn) deleteContactBtn.style.display = 'none';
     if (chatStatus) chatStatus.textContent = 'Online';
 
     activeChat.style.display = 'none';
@@ -539,6 +545,9 @@ backBtn.addEventListener('click', () => {
         leaveSecretRoom();
         return;
     }
+    if (deleteContactBtn) deleteContactBtn.style.display = 'none';
+    currentActiveContact = null;
+    currentChatId = null;
     sidebar.style.display = 'flex';
     chatArea.style.display = 'none';
     backBtn.style.display = 'none';
@@ -791,4 +800,73 @@ if (clearSecretBtn) {
         }
     });
 }
+
+// --- DELETE CONTACT & CHAT ---
+if (deleteContactBtn) {
+    deleteContactBtn.addEventListener('click', async () => {
+        if (!currentActiveContact || isSecretRoom) return;
+
+        const targetName = currentActiveContact.name || 'this contact';
+        const targetUid = currentActiveContact.uid;
+        const targetChatId = currentChatId;
+
+        const confirmed = confirm(
+            `Delete "${targetName}" and this entire chat?\n\n` +
+            `• All chat messages with ${targetName} will be deleted.\n` +
+            `• ${targetName}'s user profile document will be removed from Firestore so their name is erased from your contacts.\n\n` +
+            `Click OK to delete, or Cancel to go back.`
+        );
+        if (!confirmed) return;
+
+        try {
+            // 1. Delete all chat messages
+            if (targetChatId) {
+                const msgSnap = await db.collection('chats').doc(targetChatId).collection('messages').get();
+                if (!msgSnap.empty) {
+                    const batch = db.batch();
+                    msgSnap.forEach(doc => batch.delete(doc.ref));
+                    await batch.commit();
+                }
+                await db.collection('chats').doc(targetChatId).delete().catch(() => {});
+            }
+
+            // 2. Clear typing status docs if any
+            if (currentUser && targetUid) {
+                await db.collection('typing').doc(currentUser.uid + '_' + targetUid).delete().catch(() => {});
+                await db.collection('typing').doc(targetUid + '_' + currentUser.uid).delete().catch(() => {});
+            }
+
+            // 3. Delete user document from Firestore 'users' collection
+            await db.collection('users').doc(targetUid).delete();
+
+            // 4. Reset UI & listeners
+            if (activeContactListener) activeContactListener();
+            if (activeTypingListener) activeTypingListener();
+            if (messagesListener) messagesListener();
+            hideTypingBubble();
+
+            currentActiveContact = null;
+            currentChatId = null;
+            deleteContactBtn.style.display = 'none';
+            activeChat.style.display = 'none';
+            noChatSelected.style.display = 'flex';
+
+            if (window.innerWidth <= 768) {
+                sidebar.style.display = 'flex';
+                chatArea.style.display = 'none';
+                backBtn.style.display = 'none';
+            }
+
+            alert(`"${targetName}" and their chat were successfully deleted!`);
+        } catch (err) {
+            console.error('Error deleting contact/chat:', err);
+            alert(
+                `Could not delete user: ${err.message}\n\n` +
+                `Tip: You can also delete the document directly in Firebase Console:\n` +
+                `Go to Firebase Console ➜ Firestore Database ➜ 'users' collection ➜ delete the document for "${targetName}".`
+            );
+        }
+    });
+}
+
 

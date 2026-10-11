@@ -579,6 +579,11 @@ html, body {
   color: var(--text-primary);
 }
 
+#delete-contact-btn:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
 .send-btn {
   background-color: var(--accent);
   color: #ffffff;
