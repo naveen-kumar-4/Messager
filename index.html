@@ -20,6 +20,9 @@
                     <div class="sidebar-my-username" id="sidebar-my-username">@username</div>
                 </div>
                 <div class="sidebar-actions">
+                    <button class="attach-btn" id="refresh-app-btn" title="Refresh & Sync">
+                        <i class="ph ph-arrows-clockwise ph-xl"></i>
+                    </button>
                     <button class="attach-btn" id="edit-profile-btn" title="Edit Profile">
                         <i class="ph ph-pencil-simple ph-xl"></i>
                     </button>
@@ -89,7 +92,10 @@
                         <button class="attach-btn" id="leave-secret-btn" style="display:none;" title="Leave Secret Room">
                             <i class="ph ph-x-circle ph-xl"></i>
                         </button>
-                        <button class="attach-btn" id="delete-contact-btn" style="display:none;color:#ef4444;" title="Delete Contact & Chat">
+                        <button class="attach-btn" id="clear-chat-btn" style="display:none;" title="Clear Chat Messages">
+                            <i class="ph ph-broom ph-xl"></i>
+                        </button>
+                        <button class="attach-btn" id="delete-contact-btn" style="display:none;color:#ef4444;" title="Delete Chat & Remove Contact">
                             <i class="ph ph-trash ph-xl" style="color:#ef4444;"></i>
                         </button>
                     </div>
@@ -206,6 +212,59 @@
                 <div class="modal-error" id="add-friend-error"></div>
                 <button class="btn-primary" id="confirm-add-friend-btn">
                     <i class="ph ph-check-circle"></i> Connect & Chat
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Chat Options Modal (Clear vs Delete) -->
+    <div class="modal-overlay" id="manage-chat-modal" style="display:none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <i class="ph ph-chat-teardrop-dots ph-xl" style="color:var(--accent);"></i>
+                    <h3 id="manage-chat-title" style="margin:0;">Chat Options</h3>
+                </div>
+                <button class="attach-btn" id="close-manage-chat-modal">
+                    <i class="ph ph-x ph-xl"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="gap:14px;">
+                <p style="font-size:13px;color:var(--text-secondary);line-height:1.5;">
+                    Choose an action for this conversation:
+                </p>
+                
+                <!-- Option 1: Clear Chat Messages -->
+                <div class="manage-chat-option" id="action-clear-chat">
+                    <div class="option-icon" style="background:rgba(0, 168, 132, 0.15);color:var(--accent);">
+                        <i class="ph ph-broom ph-xl"></i>
+                    </div>
+                    <div class="option-info">
+                        <div class="option-title">Clear Chat Messages</div>
+                        <div class="option-desc">Deletes all messages in this chat. Contact remains in your list so you can keep chatting.</div>
+                    </div>
+                    <button class="btn-subtle" id="confirm-clear-chat-btn" style="color:var(--accent);border-color:var(--accent);padding:8px 14px;">
+                        Clear
+                    </button>
+                </div>
+
+                <!-- Option 2: Delete Chat & Remove Contact -->
+                <div class="manage-chat-option danger" id="action-delete-chat">
+                    <div class="option-icon" style="background:rgba(239, 68, 68, 0.15);color:#ef4444;">
+                        <i class="ph ph-trash ph-xl"></i>
+                    </div>
+                    <div class="option-info">
+                        <div class="option-title" style="color:#ef4444;">Delete Chat & Contact</div>
+                        <div class="option-desc">Deletes all messages and unpairs this friend from your contacts list.</div>
+                    </div>
+                    <button class="btn-subtle" id="confirm-delete-chat-btn" style="color:#ef4444;border-color:rgba(239, 68, 68, 0.5);padding:8px 14px;">
+                        Delete
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding-top:0;">
+                <button class="btn-subtle" id="cancel-manage-chat-btn" style="width:100%;justify-content:center;">
+                    Cancel
                 </button>
             </div>
         </div>

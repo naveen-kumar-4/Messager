@@ -147,3 +147,12 @@ authForm.addEventListener('submit', async (e) => {
         authBtn.textContent = isLogin ? 'Log In' : 'Sign Up';
     }
 });
+
+// Auto-redirect if already logged in
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        console.log('User already signed in, redirecting to app...');
+        window.location.href = 'index.html';
+    }
+});
+

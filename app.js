@@ -25,6 +25,7 @@ const attachBtn = document.getElementById('attach-btn');
 const fileInput = document.getElementById('file-input');
 const sidebarMyName = document.getElementById('sidebar-my-name');
 const sidebarMyUsername = document.getElementById('sidebar-my-username');
+const refreshAppBtn = document.getElementById('refresh-app-btn');
 
 // --- Invite Code & Add Friend Elements ---
 let myInviteCode = null;
@@ -39,10 +40,19 @@ const friendCodeInput = document.getElementById('friend-code-input');
 const confirmAddFriendBtn = document.getElementById('confirm-add-friend-btn');
 const addFriendError = document.getElementById('add-friend-error');
 
-// --- Secret Room Header Actions ---
+// --- Manage Chat Modal Elements (Clear vs Delete) ---
+const manageChatModal = document.getElementById('manage-chat-modal');
+const closeManageChatModal = document.getElementById('close-manage-chat-modal');
+const cancelManageChatBtn = document.getElementById('cancel-manage-chat-btn');
+const confirmClearChatBtn = document.getElementById('confirm-clear-chat-btn');
+const confirmDeleteChatBtn = document.getElementById('confirm-delete-chat-btn');
+const manageChatTitle = document.getElementById('manage-chat-title');
+
+// --- Chat Header Actions ---
 const leaveSecretBtn = document.getElementById('leave-secret-btn');
 const copySecretKeyBtn = document.getElementById('copy-secret-key-btn');
 const clearSecretBtn = document.getElementById('clear-secret-btn');
+const clearChatBtn = document.getElementById('clear-chat-btn');
 const deleteContactBtn = document.getElementById('delete-contact-btn');
 
 // --- Secret Room Modal Elements ---
@@ -125,7 +135,11 @@ auth.onAuthStateChanged(async (user) => {
     } else {
         currentUser = user;
         setupPresence();
-        await refreshMyProfile();
+        try {
+            await refreshMyProfile();
+        } catch (err) {
+            console.error('Error refreshing profile:', err);
+        }
         loadContacts();
     }
 });
@@ -140,41 +154,70 @@ function generateInviteCode() {
     return code;
 }
 
-// Fetch & display the current user's profile and Invite Code
+// Fetch & display the current user's profile and Invite Code (with self-healing)
 async function refreshMyProfile() {
-    const userDoc = await db.collection('users').doc(currentUser.uid).get();
-    if (userDoc.exists) {
-        const data = userDoc.data();
-        const name = data.name || currentUser.email.split('@')[0];
-        const username = data.username || '';
-        currentUserName = name;
-        sidebarMyName.textContent = name;
-        sidebarMyUsername.textContent = username ? '@' + username : data.email || '';
-        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
-        myProfileAvatar.src = avatarUrl;
+    if (!currentUser) return;
+    try {
+        let userDoc = await db.collection('users').doc(currentUser.uid).get();
 
-        // Ensure user has a unique Invite Code for 2-person pairing
-        if (data.inviteCode) {
-            myInviteCode = data.inviteCode;
-        } else {
-            myInviteCode = generateInviteCode();
-            await db.collection('users').doc(currentUser.uid).update({
-                inviteCode: myInviteCode
-            }).catch(() => {});
-        }
-
-        // Register in invite_codes lookup for fast single-doc search
-        if (myInviteCode) {
-            await db.collection('invite_codes').doc(myInviteCode).set({
+        // Self-heal: If document was deleted or missing, re-create it immediately
+        if (!userDoc.exists) {
+            console.warn('User document was missing in Firestore. Auto-recreating profile...');
+            const defaultName = (currentUser.displayName || currentUser.email || 'User').split('@')[0];
+            const newCode = generateInviteCode();
+            await db.collection('users').doc(currentUser.uid).set({
                 uid: currentUser.uid,
-                name: name,
-                username: username,
-                email: currentUser.email || ''
-            }, { merge: true }).catch((e) => console.warn('Invite code index update:', e));
+                name: defaultName,
+                email: currentUser.email || '',
+                isOnline: true,
+                inviteCode: newCode,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            userDoc = await db.collection('users').doc(currentUser.uid).get();
         }
 
-        if (myInviteCodeDisplay) {
-            myInviteCodeDisplay.textContent = myInviteCode;
+        if (userDoc.exists) {
+            const data = userDoc.data();
+            const name = data.name || (currentUser.email || 'User').split('@')[0];
+            const username = data.username || '';
+            currentUserName = name;
+            sidebarMyName.textContent = name;
+            sidebarMyUsername.textContent = username ? '@' + username : data.email || '';
+            const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
+            myProfileAvatar.src = avatarUrl;
+
+            // Ensure user has a unique Invite Code for 2-person pairing
+            if (data.inviteCode) {
+                myInviteCode = data.inviteCode;
+            } else {
+                myInviteCode = generateInviteCode();
+                await db.collection('users').doc(currentUser.uid).update({
+                    inviteCode: myInviteCode
+                }).catch(() => {});
+            }
+
+            // Register in invite_codes lookup for fast single-doc search
+            if (myInviteCode) {
+                await db.collection('invite_codes').doc(myInviteCode).set({
+                    uid: currentUser.uid,
+                    name: name,
+                    username: username,
+                    email: currentUser.email || ''
+                }, { merge: true }).catch((e) => console.warn('Invite code index update:', e));
+            }
+
+            if (myInviteCodeDisplay) {
+                myInviteCodeDisplay.textContent = myInviteCode;
+            }
+        }
+    } catch (err) {
+        console.error('Error refreshing profile:', err);
+        // Failsafe so UI never gets stuck showing "Loading..."
+        if (sidebarMyName && sidebarMyName.textContent === 'Loading...') {
+            sidebarMyName.textContent = (currentUser.email || 'User').split('@')[0];
+        }
+        if (myInviteCodeDisplay && myInviteCodeDisplay.textContent === 'Loading...') {
+            myInviteCodeDisplay.textContent = 'Active';
         }
     }
 }
@@ -504,9 +547,9 @@ function openChat(contact, avatarUrl) {
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'none';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'none';
     if (clearSecretBtn) clearSecretBtn.style.display = 'none';
-    if (deleteContactBtn) {
-        deleteContactBtn.style.display = (contact.uid !== currentUser.uid) ? 'flex' : 'none';
-    }
+    const isOtherContact = (!isSecretRoom && contact.uid !== currentUser.uid);
+    if (clearChatBtn) clearChatBtn.style.display = isOtherContact ? 'flex' : 'none';
+    if (deleteContactBtn) deleteContactBtn.style.display = isOtherContact ? 'flex' : 'none';
 
     currentChatId = [currentUser.uid, contact.uid].sort().join('_');
     chatName.textContent = contact.name;
@@ -563,6 +606,7 @@ function joinSecretRoom(passphrase) {
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'flex';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'flex';
     if (clearSecretBtn) clearSecretBtn.style.display = 'flex';
+    if (clearChatBtn) clearChatBtn.style.display = 'none';
     if (deleteContactBtn) deleteContactBtn.style.display = 'none';
 
     noChatSelected.style.display = 'none';
@@ -593,6 +637,7 @@ function leaveSecretRoom() {
     if (leaveSecretBtn) leaveSecretBtn.style.display = 'none';
     if (copySecretKeyBtn) copySecretKeyBtn.style.display = 'none';
     if (clearSecretBtn) clearSecretBtn.style.display = 'none';
+    if (clearChatBtn) clearChatBtn.style.display = 'none';
     if (deleteContactBtn) deleteContactBtn.style.display = 'none';
     if (chatStatus) chatStatus.textContent = 'Online';
 
@@ -617,6 +662,7 @@ backBtn.addEventListener('click', () => {
         leaveSecretRoom();
         return;
     }
+    if (clearChatBtn) clearChatBtn.style.display = 'none';
     if (deleteContactBtn) deleteContactBtn.style.display = 'none';
     currentActiveContact = null;
     currentChatId = null;
@@ -1005,72 +1051,174 @@ if (friendCodeInput) {
     });
 }
 
-// --- DELETE CONTACT & CHAT ---
-if (deleteContactBtn) {
-    deleteContactBtn.addEventListener('click', async () => {
-        if (!currentActiveContact || isSecretRoom) return;
-
-        const targetName = currentActiveContact.name || 'this contact';
-        const targetUid = currentActiveContact.uid;
-        const targetChatId = currentChatId;
-
-        const confirmed = confirm(
-            `Remove "${targetName}" and delete this chat?\n\n` +
-            `• Both of you will be unpaired from each other's contact list.\n` +
-            `• All chat messages with ${targetName} will be deleted.\n\n` +
-            `Click OK to proceed, or Cancel to keep.`
-        );
-        if (!confirmed) return;
-
+// --- SYNC & REFRESH BUTTON ---
+if (refreshAppBtn) {
+    refreshAppBtn.addEventListener('click', async () => {
+        refreshAppBtn.classList.add('spinning');
         try {
-            // 1. Remove mutual contact pairing
-            if (currentUser && targetUid) {
-                await db.collection('users').doc(currentUser.uid).collection('contacts').doc(targetUid).delete().catch(() => {});
-                await db.collection('users').doc(targetUid).collection('contacts').doc(currentUser.uid).delete().catch(() => {});
+            await refreshMyProfile();
+            loadContacts();
+            if (currentActiveContact && currentChatId && !isSecretRoom) {
+                loadMessages();
             }
-
-            // 2. Delete all chat messages
-            if (targetChatId) {
-                const msgSnap = await db.collection('chats').doc(targetChatId).collection('messages').get();
-                if (!msgSnap.empty) {
-                    const batch = db.batch();
-                    msgSnap.forEach(doc => batch.delete(doc.ref));
-                    await batch.commit();
-                }
-                await db.collection('chats').doc(targetChatId).delete().catch(() => {});
-            }
-
-            // 3. Clear typing status docs if any
-            if (currentUser && targetUid) {
-                await db.collection('typing').doc(currentUser.uid + '_' + targetUid).delete().catch(() => {});
-                await db.collection('typing').doc(targetUid + '_' + currentUser.uid).delete().catch(() => {});
-            }
-
-            // 4. Reset UI & listeners
-            if (activeContactListener) activeContactListener();
-            if (activeTypingListener) activeTypingListener();
-            if (messagesListener) messagesListener();
-            hideTypingBubble();
-
-            currentActiveContact = null;
-            currentChatId = null;
-            deleteContactBtn.style.display = 'none';
-            activeChat.style.display = 'none';
-            noChatSelected.style.display = 'flex';
-
-            if (window.innerWidth <= 768) {
-                sidebar.style.display = 'flex';
-                chatArea.style.display = 'none';
-                backBtn.style.display = 'none';
-            }
-
-            alert(`"${targetName}" was removed from your contacts and the chat was deleted.`);
         } catch (err) {
-            console.error('Error removing contact/chat:', err);
-            alert('Error removing contact: ' + err.message);
+            console.error('Refresh/Sync error:', err);
+        } finally {
+            setTimeout(() => {
+                refreshAppBtn.classList.remove('spinning');
+            }, 700);
         }
     });
+
+    // Long press or double click triggers full browser reload
+    refreshAppBtn.addEventListener('dblclick', () => {
+        window.location.reload();
+    });
 }
+
+// --- CLEAR CHAT (Messages Only - Contact Stays) ---
+async function clearCurrentChat() {
+    if (!currentActiveContact || !currentChatId || isSecretRoom) return;
+    const targetName = currentActiveContact.name || 'this contact';
+
+    const confirmed = confirm(
+        `Clear all messages with "${targetName}"?\n\n` +
+        `• All chat messages will be deleted.\n` +
+        `• "${targetName}" will REMAIN in your contacts list so you can continue chatting.\n\n` +
+        `Click OK to clear messages, or Cancel to keep.`
+    );
+    if (!confirmed) return;
+
+    try {
+        const msgSnap = await db.collection('chats').doc(currentChatId).collection('messages').get();
+        if (!msgSnap.empty) {
+            const batch = db.batch();
+            msgSnap.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        }
+
+        // Close manage chat modal if open
+        if (manageChatModal) manageChatModal.style.display = 'none';
+        chatMessages.innerHTML = '';
+
+        alert(`All messages with "${targetName}" have been cleared.`);
+    } catch (err) {
+        console.error('Error clearing chat:', err);
+        alert('Failed to clear messages: ' + err.message);
+    }
+}
+
+// --- DELETE CHAT & REMOVE CONTACT (Unpair Completely) ---
+async function deleteChatAndRemoveContact() {
+    if (!currentActiveContact || isSecretRoom) return;
+
+    const targetName = currentActiveContact.name || 'this contact';
+    const targetUid = currentActiveContact.uid;
+    const targetChatId = currentChatId;
+
+    const confirmed = confirm(
+        `Delete chat AND remove "${targetName}" from your contacts?\n\n` +
+        `• All chat messages will be deleted.\n` +
+        `• "${targetName}" will be REMOVED from your contacts list.\n` +
+        `• You will need their Invite Code to connect again.\n\n` +
+        `Click OK to delete and unpair, or Cancel to keep.`
+    );
+    if (!confirmed) return;
+
+    try {
+        // 1. Remove mutual contact pairing
+        if (currentUser && targetUid) {
+            await db.collection('users').doc(currentUser.uid).collection('contacts').doc(targetUid).delete().catch(() => {});
+            await db.collection('users').doc(targetUid).collection('contacts').doc(currentUser.uid).delete().catch(() => {});
+        }
+
+        // 2. Delete all chat messages
+        if (targetChatId) {
+            const msgSnap = await db.collection('chats').doc(targetChatId).collection('messages').get();
+            if (!msgSnap.empty) {
+                const batch = db.batch();
+                msgSnap.forEach(doc => batch.delete(doc.ref));
+                await batch.commit();
+            }
+            await db.collection('chats').doc(targetChatId).delete().catch(() => {});
+        }
+
+        // 3. Clear typing status docs if any
+        if (currentUser && targetUid) {
+            await db.collection('typing').doc(currentUser.uid + '_' + targetUid).delete().catch(() => {});
+            await db.collection('typing').doc(targetUid + '_' + currentUser.uid).delete().catch(() => {});
+        }
+
+        // 4. Close modal and reset UI
+        if (manageChatModal) manageChatModal.style.display = 'none';
+        if (activeContactListener) activeContactListener();
+        if (activeTypingListener) activeTypingListener();
+        if (messagesListener) messagesListener();
+        hideTypingBubble();
+
+        currentActiveContact = null;
+        currentChatId = null;
+        if (clearChatBtn) clearChatBtn.style.display = 'none';
+        if (deleteContactBtn) deleteContactBtn.style.display = 'none';
+        activeChat.style.display = 'none';
+        noChatSelected.style.display = 'flex';
+
+        if (window.innerWidth <= 768) {
+            sidebar.style.display = 'flex';
+            chatArea.style.display = 'none';
+            backBtn.style.display = 'none';
+        }
+
+        alert(`"${targetName}" was removed from your contacts and the chat was deleted.`);
+    } catch (err) {
+        console.error('Error removing contact/chat:', err);
+        alert('Error removing contact: ' + err.message);
+    }
+}
+
+// --- MANAGE CHAT MODAL LOGIC ---
+function openManageChatModal() {
+    if (!currentActiveContact || isSecretRoom) return;
+    if (manageChatTitle) {
+        manageChatTitle.textContent = `Chat with ${currentActiveContact.name || 'Friend'}`;
+    }
+    if (manageChatModal) manageChatModal.style.display = 'flex';
+}
+
+function closeManageChatModalFn() {
+    if (manageChatModal) manageChatModal.style.display = 'none';
+}
+
+if (clearChatBtn) {
+    clearChatBtn.addEventListener('click', clearCurrentChat);
+}
+
+if (deleteContactBtn) {
+    deleteContactBtn.addEventListener('click', openManageChatModal);
+}
+
+if (confirmClearChatBtn) {
+    confirmClearChatBtn.addEventListener('click', clearCurrentChat);
+}
+
+if (confirmDeleteChatBtn) {
+    confirmDeleteChatBtn.addEventListener('click', deleteChatAndRemoveContact);
+}
+
+if (closeManageChatModal) {
+    closeManageChatModal.addEventListener('click', closeManageChatModalFn);
+}
+
+if (cancelManageChatBtn) {
+    cancelManageChatBtn.addEventListener('click', closeManageChatModalFn);
+}
+
+if (manageChatModal) {
+    manageChatModal.addEventListener('click', (e) => {
+        if (e.target === manageChatModal) closeManageChatModalFn();
+    });
+}
+
 
 
 

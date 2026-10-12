@@ -579,6 +579,26 @@ html, body {
   color: var(--text-primary);
 }
 
+#clear-chat-btn:hover {
+  background-color: rgba(0, 168, 132, 0.15);
+  color: var(--accent);
+}
+
+#refresh-app-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--accent);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spinning i {
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
 #delete-contact-btn:hover {
   background-color: rgba(239, 68, 68, 0.15);
   color: #ef4444;
@@ -731,6 +751,56 @@ html, body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+}
+
+/* Manage Chat Modal Options */
+.manage-chat-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.manage-chat-option:hover {
+  background-color: var(--bg-input);
+  border-color: var(--accent);
+}
+
+.manage-chat-option.danger:hover {
+  border-color: #ef4444;
+}
+
+.option-icon {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.option-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.option-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.option-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.35;
 }
 
 /* Secret Room Styles */
